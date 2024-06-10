@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 
 # 스크립트 파일의 위치를 기준으로 경로 설정
-base_path = os.getcwd()
+base_path = os.path.dirname(os.path.abspath(__file__))
 csv_file_path = os.path.join(base_path, 'data/pit/basic_pit_stop_data.csv')
 
 # 파일 존재 여부 확인
