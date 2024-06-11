@@ -1,13 +1,15 @@
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
+from airflow.providers.google.cloud.transfers.local_to_gcs import (
+    LocalFilesystemToGCSOperator,
+)
 import requests
 import pandas as pd
 import os
 
 # 스크립트 파일의 위치를 기준으로 경로 설정
-csv_file_path = '/opt/airflow/data/pit/basic_pit_stop_data.csv'
+csv_file_path = "/opt/airflow/data/pit/basic_pit_stop_data.csv"
 
 
 def fetch_and_save_pit_data(**kwargs):
@@ -46,7 +48,9 @@ def fetch_and_save_pit_data(**kwargs):
                     }
                 )
         else:
-            print(f"Failed to fetch data for session_key {session_key}. Status code: {response2.status_code}")
+            print(
+                f"Failed to fetch data for session_key {session_key}. Status code: {response2.status_code}"
+            )
 
     new_df = pd.DataFrame(new_pit_data)
     combined_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates()
@@ -54,10 +58,11 @@ def fetch_and_save_pit_data(**kwargs):
     # 새로운 CSV 파일 이름 설정
     date_str = datetime.now().strftime("%Y%m%d")
     new_file_path = f"/opt/airflow/data/pit/pit_stop_data_{date_str}.csv"
-    
+
     # 새로운 CSV 파일로 저장
     combined_df.to_csv(new_file_path, index=False)
     return new_file_path
+
 
 with DAG(
     dag_id="f1_pit_stop_data_pipeline",
@@ -73,10 +78,10 @@ with DAG(
     )
 
     upload_to_gcs_task = LocalFilesystemToGCSOperator(
-        task_id='upload_to_gcs',
-        src="{{ task_instance.xcom_pull(task_ids='fetch_and_save_pit_data') }}", # 이전 작업에서 생성된 파일 경로를 가져옴
-        dst="data/pit/{{ execution_date.strftime('%Y%m%d') }}/pit_stop_data.csv", # GCS에 저장될 파일 경로 및 이름 (execution_date에 따라 폴더 생성)
-        bucket="{{ var.value.gcs_bucket_name }}", # GCS bucket 이름, (Web UI에서 Variable 등록)
+        task_id="upload_to_gcs",
+        src="{{ task_instance.xcom_pull(task_ids='fetch_and_save_pit_data') }}",  # 이전 작업에서 생성된 파일 경로를 가져옴
+        dst="data/pit/{{ execution_date.strftime('%Y%m%d') }}/pit_stop_data.csv",  # GCS에 저장될 파일 경로 및 이름 (execution_date에 따라 폴더 생성)
+        bucket="{{ var.value.gcs_bucket_name }}",  # GCS bucket 이름, (Web UI에서 Variable 등록)
         gcp_conn_id="gcs_connection",  # GCS connection 정보 (Web UI에서 Connection 등록)
     )
 

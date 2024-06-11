@@ -8,7 +8,8 @@ import io
 import os
 
 # 스크립트 파일의 위치를 기준으로 경로 설정
-csv_file_path = '/opt/airflow/data/pit/basic_pit_stop_data.csv'
+csv_file_path = "/opt/airflow/data/pit/basic_pit_stop_data.csv"
+
 
 def fetch_and_upload_pit_data(bucket_name, **kwargs):
     # 파일 존재 여부 확인
@@ -46,7 +47,9 @@ def fetch_and_upload_pit_data(bucket_name, **kwargs):
                     }
                 )
         else:
-            print(f"Failed to fetch data for session_key {session_key}. Status code: {response2.status_code}")
+            print(
+                f"Failed to fetch data for session_key {session_key}. Status code: {response2.status_code}"
+            )
 
     new_df = pd.DataFrame(new_pit_data)
     combined_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates()
@@ -65,8 +68,9 @@ def fetch_and_upload_pit_data(bucket_name, **kwargs):
         bucket_name=bucket_name,
         object_name=gcs_path,
         data=csv_data,
-        mime_type='text/csv'
+        mime_type="text/csv",
     )
+
 
 with DAG(
     dag_id="f1_pit_stop_data_pipeline_v2",
