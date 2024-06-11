@@ -19,7 +19,6 @@ def position(session_key):
         ).json()
         position_df = pd.DataFrame(response)
         # 선수별로 가장 최근 기록
-        # lastest_records = get_latest_records(position_df)
         dfs.append(position_df)
 
     # 경기 결과(ex. 2023 퀄리파잉)
