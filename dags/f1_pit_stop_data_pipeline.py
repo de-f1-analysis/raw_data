@@ -1,18 +1,25 @@
 from datetime import datetime
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from airflow.providers.google.cloud.transfers.local_to_gcs import (
-    LocalFilesystemToGCSOperator,
-)
+from airflow.providers.google.cloud.hooks.gcs import GCSHook
 import requests
 import pandas as pd
+import io
 import os
 
 # 스크립트 파일의 위치를 기준으로 경로 설정
-csv_file_path = "/opt/airflow/data/pit/basic_pit_stop_data.csv"
+csv_file_path = '/opt/airflow/data/pit/basic_pit_stop_data.csv'
 
 
-def fetch_and_save_pit_data(**kwargs):
+# GCS에서 파일을 다운로드하고 DataFrame으로 로드하는 함수
+def load_csv_from_gcs(bucket_name, object_name):
+    gcs_hook = GCSHook(gcp_conn_id="google_cloud_default")
+    file_content = gcs_hook.download(bucket_name=bucket_name, object_name=object_name)
+    return pd.read_csv(io.StringIO(file_content.decode('utf-8')))
+
+
+
+def fetch_and_upload_pit_data(bucket_name, **kwargs):
     # 파일 존재 여부 확인
     if not os.path.isfile(csv_file_path):
         raise FileNotFoundError(f"The file {csv_file_path} does not exist.")
@@ -48,41 +55,41 @@ def fetch_and_save_pit_data(**kwargs):
                     }
                 )
         else:
-            print(
-                f"Failed to fetch data for session_key {session_key}. Status code: {response2.status_code}"
-            )
+            print(f"Failed to fetch data for session_key {session_key}. Status code: {response2.status_code}")
 
     new_df = pd.DataFrame(new_pit_data)
     combined_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates()
 
-    # 새로운 CSV 파일 이름 설정
+    # DataFrame을 CSV 형식으로 변환
+    csv_buffer = io.StringIO()
+    combined_df.to_csv(csv_buffer, index=False)
+    csv_data = csv_buffer.getvalue()
+
+    # GCS에 업로드
     date_str = datetime.now().strftime("%Y%m%d")
-    new_file_path = f"/opt/airflow/data/pit/pit_stop_data_{date_str}.csv"
+    gcs_path = f"data/pit/pit_stop_data_{date_str}.csv"
 
-    # 새로운 CSV 파일로 저장
-    combined_df.to_csv(new_file_path, index=False)
-    return new_file_path
-
+    gcs_hook = GCSHook(gcp_conn_id="google_cloud_default")
+    gcs_hook.upload(
+        bucket_name=bucket_name,
+        object_name=gcs_path,
+        data=csv_data,
+        mime_type='text/csv'
+    )
 
 with DAG(
-    dag_id="f1_pit_stop_data_pipeline",
+    dag_id="f1_pit_stop_data_pipeline_v3",
     start_date=datetime(2024, 1, 1),
     schedule=None,
     catchup=False,
 ) as dag:
 
-    fetch_and_save_pit_data_task = PythonOperator(
-        task_id="fetch_and_save_pit_data",
-        python_callable=fetch_and_save_pit_data,
+    fetch_and_upload_pit_data_task = PythonOperator(
+        task_id="fetch_and_upload_pit_data",
+        python_callable=fetch_and_upload_pit_data,
+        op_kwargs={"bucket_name": "{{ var.value.gcs_bucket_name }}",
+                   "object_name": "{{ var.value.gcs_basic_pit_data}}"},
         provide_context=True,
     )
 
-    upload_to_gcs_task = LocalFilesystemToGCSOperator(
-        task_id="upload_to_gcs",
-        src="{{ task_instance.xcom_pull(task_ids='fetch_and_save_pit_data') }}",  # 이전 작업에서 생성된 파일 경로를 가져옴
-        dst="data/pit/{{ execution_date.strftime('%Y%m%d') }}/pit_stop_data.csv",  # GCS에 저장될 파일 경로 및 이름 (execution_date에 따라 폴더 생성)
-        bucket="{{ var.value.gcs_bucket_name }}",  # GCS bucket 이름, (Web UI에서 Variable 등록)
-        gcp_conn_id="gcs_connection",  # GCS connection 정보 (Web UI에서 Connection 등록)
-    )
-
-    fetch_and_save_pit_data_task >> upload_to_gcs_task
+fetch_and_upload_pit_data_task
