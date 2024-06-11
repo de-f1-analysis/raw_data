@@ -57,4 +57,4 @@ for param in params:
     result.append(merge)
 
 final_combined_df = pd.concat(result)
-final_combined_df.to_csv("postion.csv")
+final_combined_df.to_csv("position.csv")
